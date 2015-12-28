@@ -1,5 +1,7 @@
 package net.jdfs.dfs.server;
 
+import org.springframework.beans.factory.InitializingBean;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -13,7 +15,7 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
-public class HttpServer {
+public class HttpServer implements InitializingBean {
   
 	public static void main(String[] args) {
 		
@@ -41,7 +43,7 @@ public class HttpServer {
 			});
 			
 			ChannelFuture future = b.bind("127.0.0.1",80).sync();
-			System.out.println("netty http 服务器启动");
+			System.err.println("netty http 服务器启动:127.0.0.1");
 			//等待服务端监听端口关闭
 			future.channel().closeFuture().sync();
 		} catch (Exception e) {
@@ -53,4 +55,10 @@ public class HttpServer {
 		}
 		
 	}
+
+	public void afterPropertiesSet() throws Exception {
+		
+	}
+	
+	
 }

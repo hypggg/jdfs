@@ -15,6 +15,8 @@
  */
 package net.jdfs.dfs.server.fieupload;
 
+import org.apache.log4j.Logger;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
@@ -29,11 +31,55 @@ import io.netty.handler.ssl.util.SelfSignedCertificate;
  * A HTTP server showing how to use the HTTP multipart package for file uploads and decoding post data.
  */
 public final class HttpUploadServer {
-
+	
+	private static Logger log = Logger.getLogger(HttpUploadServer.class);
     static final boolean SSL = System.getProperty("ssl") != null;
     static final int PORT = Integer.parseInt(System.getProperty("port", SSL? "8443" : "8080"));
+    //获取CPU数
+	private static final int PROCESSORS = Runtime.getRuntime().availableProcessors();
+	NioEventLoopGroup bossGroup ;
+	NioEventLoopGroup workerGroup ;
+  
+  
+    
+   
+   private void start() throws Exception{
+    	 final SslContext sslCtx;
+         if (SSL) {
+             SelfSignedCertificate ssc = new SelfSignedCertificate();
+             sslCtx = SslContext.newServerContext(ssc.certificate(), ssc.privateKey());
+         } else {
+             sslCtx = null;
+         }
 
-    public static void main(String[] args) throws Exception {
+          bossGroup = new NioEventLoopGroup(1);
+          workerGroup = new NioEventLoopGroup(PROCESSORS);
+          log.info("启动管理线程数："+1+",工作线程数："+PROCESSORS*2);
+         try {
+             ServerBootstrap b = new ServerBootstrap();
+             b.group(bossGroup, workerGroup);
+             b.channel(NioServerSocketChannel.class);
+             b.handler(new LoggingHandler(LogLevel.INFO));
+             b.childHandler(new HttpUploadServerInitializer(sslCtx));
+
+             Channel ch = b.bind(PORT).sync().channel();
+
+             System.err.println("Open your web browser and navigate to " +
+                     (SSL? "https" : "http") + "://127.0.0.1:" + PORT + '/');
+
+             ch.closeFuture().sync();
+         } finally {
+            
+         }
+    }
+    
+    private void stop(){
+    	 bossGroup.shutdownGracefully();
+         workerGroup.shutdownGracefully();
+    }
+    
+    
+     /* public static void main(String[] args) throws Exception {
         // Configure SSL.
         final SslContext sslCtx;
         if (SSL) {
@@ -62,5 +108,6 @@ public final class HttpUploadServer {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
-    }
+    }*/
+     
 }

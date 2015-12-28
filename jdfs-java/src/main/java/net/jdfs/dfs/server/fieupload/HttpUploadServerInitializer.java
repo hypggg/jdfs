@@ -15,6 +15,7 @@
  */
 package net.jdfs.dfs.server.fieupload;
 
+import net.jdfs.dfs.server.HttpCmdServerHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;

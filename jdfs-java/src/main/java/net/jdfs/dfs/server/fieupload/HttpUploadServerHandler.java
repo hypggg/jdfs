@@ -15,7 +15,14 @@
  */
 package net.jdfs.dfs.server.fieupload;
 
+import static io.netty.buffer.Unpooled.copiedBuffer;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONNECTION;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_LENGTH;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
+import static io.netty.handler.codec.http.HttpHeaders.Names.COOKIE;
+import static io.netty.handler.codec.http.HttpHeaders.Names.SET_COOKIE;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -60,8 +67,9 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static io.netty.buffer.Unpooled.*;
-import static io.netty.handler.codec.http.HttpHeaders.Names.*;
+import org.apache.log4j.helpers.FileWatchdog;
+
+import net.jdfs.dfs.util.PropertiesUtil;
 
 public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
@@ -72,7 +80,16 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
     private boolean readingChunks;
 
     private final StringBuilder responseContent = new StringBuilder();
-    //http数据工厂对象，根据所传大小参数决定多少使用内存，超出后将存于磁盘。
+    
+	private static String[] paths ={"/jdfs.conf","/test.conf"};
+    
+	private static PropertiesUtil prop =PropertiesUtil.getInstance(paths);
+	
+	//TODO 这个变量必须要线程相关
+	//用来记录当前文件上传 了多少 
+	private static int  uploadCount = 0; 
+    
+	//http数据工厂对象，根据所传大小参数决定多少使用内存，超出后将存于磁盘。
     private static final HttpDataFactory factory =
             new DefaultHttpDataFactory(DefaultHttpDataFactory.MINSIZE); // Disk if size exceed
 
@@ -99,12 +116,15 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, HttpObject msg) throws Exception {
+    	
+    	System.out.println("aaaaaa");
+    	
         if (msg instanceof HttpRequest) {
             HttpRequest request = this.request = (HttpRequest) msg;
             URI uri = new URI(request.getUri());
             if (!uri.getPath().startsWith("/form")) {
                 // Write Menu
-                writeMenu(ctx);
+            	writeMenu(ctx);
                 return;
             }
             responseContent.setLength(0);
@@ -190,8 +210,14 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
                 try {
                 	//返回httpContent的Bytebuf
                 	ByteBuf buf = chunk.content();
-                	logger.info("chunk buf size:"+buf.capacity());
+//                	logger.info("chunk buf size:"+buf.capacity());
+                	uploadCount+=buf.capacity();
                 	
+                	try {
+						Thread.sleep(50);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
                 	
                 	//Initialized the internals from a new chunk
                 	//初始化新块的内部
@@ -203,11 +229,10 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
                     ctx.channel().close();
                     return;
                 }
-                
                 //decoder.getDiscardThreshold() 丢弃字节的阈值
-                System.out.println("decoder.getDiscardThreshold():"+decoder.getDiscardThreshold()+
+              /*  logger.info("decoder.getDiscardThreshold():"+decoder.getDiscardThreshold()+
                 		",decoder.hasNext():"+decoder.hasNext()+",decoder.isMultipart():"+decoder.isMultipart()
-                		);
+                		);*/
                 
                 responseContent.append('o');
                 // example of reading chunk by chunk (minimize memory usage due to
@@ -223,7 +248,7 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
                     //重置读下标
                     buf.resetReaderIndex();
                     buf.readBytes(bytes);
-                    logger.info("lastHttpContent-------------:"+new String(bytes)+"-------------");
+//                    logger.info("lastHttpContent-------------:"+new String(bytes)+"-------------");
                     
                     
                     reset();
@@ -305,7 +330,8 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
                     System.out.println(" fileUpload.isInMemory():"+ fileUpload.isInMemory());// tells if the file is in Memory
                     // or on File
                     try {
-						File f = new File("d:/"+fileUpload.getFilename());
+                    	System.out.println(PropertiesUtil.getValus("jdfs.file.savePath"));
+						File f = new File(PropertiesUtil.getValus("jdfs.file.savePath")+File.separator+fileUpload.getFilename());
 						/**
 						 * 一个将上传文件存储到磁盘的便利方法，如果之前 的文件已经存在将会被删除，如果
 						 * 这个调用成功了 ，新生成的文件将不会被创建InterfaceHttpData 的工厂清除
@@ -314,7 +340,10 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
 					     * the new file will be out of the cleaner of the factory that creates the
 					     * original InterfaceHttpData object.
 					     */
+						System.out.println(f.getAbsoluteFile());
 							fileUpload.renameTo(f); // enable to move into another
+						logger.info("upoadCount:"+uploadCount);
+						uploadCount = 0;
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -458,6 +487,17 @@ public class HttpUploadServerHandler extends SimpleChannelInboundHandler<HttpObj
         ctx.channel().writeAndFlush(response);
     }
 
+    private void writeTest (ChannelHandlerContext ctx){
+		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+		response.headers().set("Content-Type", "application/json;charset=UTF-8");
+		String retStr = new String ("{\"status\":\""+0+"\",\"uploadPath\":\"http://xxxx\"}");
+		ByteBuf buffer = Unpooled.copiedBuffer(retStr, CharsetUtil.UTF_8);
+		response.content().writeBytes(buffer);
+		buffer.release();
+		ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+		
+	}
+    
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         logger.log(Level.WARNING, responseContent.toString(), cause);
